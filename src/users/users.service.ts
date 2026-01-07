@@ -24,33 +24,46 @@ export class UsersService {
 
         const [items, total] = await this.prisma.$transaction([
             this.prisma.user.findMany({
-                skip,
-                take,
-                orderBy: { id: 'desc' },
-                select: { id: true, email: true, firstName: true, lastName: true, createdAt: true, posts: true },
+            skip,
+            take,
+            orderBy: { id: 'desc' },
+            select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true,
+                createdAt: true,
+                _count: { select: { posts: true } },
+            },
             }),
             this.prisma.user.count(),
         ])
 
-        const itemsWithName = items.map((u) => ({
-            ...u,
-            name: [u.firstName, u.lastName].filter(Boolean).join(' '), 
+        const itemsMapped = items.map((u) => ({
+            id: u.id,
+            email: u.email,
+            firstName: u.firstName,
+            lastName: u.lastName,
+            createdAt: u.createdAt,
+            name: [u.firstName, u.lastName].filter(Boolean).join(' '),
+            postsCount: u._count.posts,
         }))
 
         const totalPages = Math.ceil(total / take)
 
         return {
-            items: itemsWithName,
+            items: itemsMapped,
             meta: {
-                page,
-                take,
-                total,
-                totalPages,
-                hasNextPage: page < totalPages,
-                hasPrevPage: page > 1,
+            page,
+            take,
+            total,
+            totalPages,
+            hasNextPage: page < totalPages,
+            hasPrevPage: page > 1,
             },
         }
     }
+
 
     async findOne(id: string) {
         const user = await this.prisma.user.findUnique({
@@ -81,13 +94,14 @@ export class UsersService {
 
     async delete(id: string) {
         try {
-            await this.prisma.post.deleteMany({
+            await this.prisma.$transaction([
+            this.prisma.post.deleteMany({
                 where: { authorId: id },
-            })
-
-            await this.prisma.user.delete({
+            }),
+            this.prisma.user.delete({
                 where: { id },
-            })
+            }),
+            ])
 
             return { message: 'User deleted successfully' }
         } catch (e: any) {
@@ -95,4 +109,5 @@ export class UsersService {
             throw e
         }
     }
+
 }
